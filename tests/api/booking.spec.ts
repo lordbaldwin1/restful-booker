@@ -28,6 +28,64 @@ const testBooking: Booking = {
   additionalneeds: "Breakfast",
 };
 
+const testBookingsAfter2028: Booking[] = [
+  {
+    firstname: "alice",
+    lastname: "future",
+    totalprice: 1001,
+    depositpaid: false,
+    bookingdates: {
+      checkin: "2028-01-05",
+      checkout: "2028-01-10",
+    },
+    additionalneeds: "Late Checkout",
+  },
+  {
+    firstname: "bob",
+    lastname: "forward",
+    totalprice: 888,
+    depositpaid: true,
+    bookingdates: {
+      checkin: "2028-02-15",
+      checkout: "2028-02-20",
+    },
+    additionalneeds: "Breakfast",
+  },
+  {
+    firstname: "charlie",
+    lastname: "tomorrow",
+    totalprice: 567,
+    depositpaid: false,
+    bookingdates: {
+      checkin: "2029-03-01",
+      checkout: "2029-03-05",
+    },
+    additionalneeds: "Airport Pickup",
+  },
+  {
+    firstname: "danielle",
+    lastname: "time",
+    totalprice: 321,
+    depositpaid: true,
+    bookingdates: {
+      checkin: "2030-04-12",
+      checkout: "2030-04-17",
+    },
+    additionalneeds: "Dinner",
+  },
+  {
+    firstname: "edward",
+    lastname: "futureman",
+    totalprice: 754,
+    depositpaid: true,
+    bookingdates: {
+      checkin: "2031-05-20",
+      checkout: "2031-05-25",
+    },
+    additionalneeds: "Spa",
+  },
+];
+
 const updateBooking: Booking = {
   firstname: "test",
   lastname: "tester",
@@ -139,7 +197,77 @@ test.describe("Booking API tests", () => {
     expect(data.bookingdates.checkin).toBe("2025-01-01");
     expect(data.bookingdates.checkout).toBe("2026-01-01");
     expect(data.additionalneeds).toBe("Breakfast");
-  })
+  });
+
+  test("DELETE - delete a booking returns 201, GET returns 404", async ({ request, testData }) => {
+    const authRes = await request.post("/auth", {
+      data: {
+        username: "admin",
+        password: "password123",
+      },
+    });
+    const { token } = await authRes.json();
+    const testBooking = await createBooking(testData, request);
+
+    const response = await request.delete(`/booking/${testBooking.bookingid}`, {
+      headers: { "Cookie": `token=${token}` },
+    });
+    expect(response.status()).toBe(201);
+
+    const getRes = await request.get(`/booking/${testBooking.bookingid}`);
+    expect(getRes.status()).toBe(404);
+  });
+
+  test("GET - filter for bookings with checkin after 2028", async ({ request }) => {
+    const bookingIds: string[] = [];
+    for (const testBooking of testBookingsAfter2028) {
+      const createdBooking = await createBooking(testBooking, request);
+      bookingIds.push(createdBooking.bookingid);
+    }
+
+    const filteredRes = await request.get(`/booking?checkin=2028-01-01`);
+    const filteredBookings = await filteredRes.json();
+
+    expect(filteredBookings.length).toBe(5);
+
+    for (const { bookingid } of filteredBookings) {
+      const res = await request.get(`/booking/${bookingid}`);
+      expect(res.status()).toBe(200);
+      const booking = await res.json();
+      const testDate = new Date("2028-01-01");
+      const bookingDate = new Date(booking.bookingdates.checkin);
+      expect(bookingDate.getTime()).toBeGreaterThanOrEqual(testDate.getTime());
+    }
+
+    for (const { bookingid } of filteredBookings) {
+      const authRes = await request.post("/auth", {
+        data: { username: "admin", password: "password123" },
+      });
+      const { token } = await authRes.json();
+      const deleteRes = await request.delete(`/booking/${bookingid}`, {
+        headers: { "Cookie": `token=${token}` },
+      });
+      expect(deleteRes.status()).toBe(201);
+    }
+  });
+
+  test("GET - booking returns correct schema types", async ({ request, testData }) => {
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+    const testBooking = await createBooking(testData, request);
+    const res = await request.get(`/booking/${testBooking.bookingid}`);
+    expect(res.status()).toBe(200);
+    
+    const booking = await res.json();
+    expect(typeof booking.firstname).toBe("string");
+    expect(typeof booking.lastname).toBe("string");
+    expect(typeof booking.totalprice).toBe("number");
+    expect(typeof booking.depositpaid).toBe("boolean");
+    expect(typeof booking.bookingdates.checkin).toBe("string");
+    expect(typeof booking.bookingdates.checkout).toBe("string");
+    expect(dateRegex.test(booking.bookingdates.checkin)).toBeTruthy();
+    expect(dateRegex.test(booking.bookingdates.checkout)).toBeTruthy();
+    expect(typeof booking.additionalneeds).toBe("string");
+  });
 });
 
 async function createBooking(booking: Booking, request: APIRequestContext) {
