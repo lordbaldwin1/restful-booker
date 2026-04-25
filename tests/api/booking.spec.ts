@@ -28,6 +28,18 @@ const testBooking: Booking = {
   additionalneeds: "Breakfast",
 };
 
+const updateBooking: Booking = {
+  firstname: "test",
+  lastname: "tester",
+  totalprice: 333,
+  depositpaid: false,
+  bookingdates: {
+    checkin: "2024-02-02",
+    checkout: "2025-02-02",
+  },
+  additionalneeds: "Dinner",
+};
+
 const test = base.extend<BookingTestFixture>({
   testData: async ({ }, use) => {
     await use(testBooking);
@@ -74,10 +86,64 @@ test.describe("Booking API tests", () => {
     const data = await response.json();
     expect(data).toHaveProperty("bookingid");
   });
+
+  test("PUT - Updating booking changes all fields", async ({ request, testData }) => {
+    const authResponse = await request.post("/auth", {
+      data: {
+        username: "admin",
+        password: "password123",
+      },
+    });
+    expect(authResponse.status()).toBe(200);
+    const { token } = await authResponse.json();
+
+    const testBooking = await createBooking(testData, request);
+    const response = await request.put(`/booking/${testBooking.bookingid}`, {
+      headers: {
+        "Cookie": `token=${token}`,
+      },
+      data: updateBooking,
+    });
+
+    expect(response.status()).toBe(200);
+
+    const data = await response.json();
+    expect(data).toEqual(updateBooking);
+  });
+
+  test("PATCH - Updating name changes only name", async ({ request, testData }) => {
+    const authRes = await request.post("/auth", {
+      data: {
+        username: "admin",
+        password: "password123",
+      },
+    });
+    const { token } = await authRes.json();
+
+    const testBooking = await createBooking(testData, request);
+    const response = await request.patch(`/booking/${testBooking.bookingid}`, {
+      headers: {
+        "Cookie": `token=${token}`,
+      },
+      data: {
+        firstname: "patchedTest",
+      },
+    });
+
+    expect(response.status()).toBe(200);
+    const data = await response.json();
+    expect(data.firstname).toBe("patchedTest");
+    expect(data.lastname).toBe("tester");
+    expect(data.totalprice).toBe(549);
+    expect(data.depositpaid).toBe(true);
+    expect(data.bookingdates.checkin).toBe("2025-01-01");
+    expect(data.bookingdates.checkout).toBe("2026-01-01");
+    expect(data.additionalneeds).toBe("Breakfast");
+  })
 });
 
 async function createBooking(booking: Booking, request: APIRequestContext) {
-  const response = await request.post("https://restful-booker.herokuapp.com/booking", {
+  const response = await request.post("/booking", {
     data: booking,
   });
 
