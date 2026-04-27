@@ -107,7 +107,7 @@ const test = base.extend<BookingTestFixture>({
 test.describe("Booking API tests", () => {
   test("GET - should retrieve list of bookings", async ({ request }) => {
     const response = await request.get("/booking");
-    
+
     expect(response.status()).toBe(200);
     const data = await response.json();
     expect(Array.isArray(data)).toBeTruthy();
@@ -256,7 +256,7 @@ test.describe("Booking API tests", () => {
     const testBooking = await createBooking(testData, request);
     const res = await request.get(`/booking/${testBooking.bookingid}`);
     expect(res.status()).toBe(200);
-    
+
     const booking = await res.json();
     expect(typeof booking.firstname).toBe("string");
     expect(typeof booking.lastname).toBe("string");
@@ -267,6 +267,55 @@ test.describe("Booking API tests", () => {
     expect(dateRegex.test(booking.bookingdates.checkin)).toBeTruthy();
     expect(dateRegex.test(booking.bookingdates.checkout)).toBeTruthy();
     expect(typeof booking.additionalneeds).toBe("string");
+  });
+
+  test("GET - create booking with missing required field", async ({ request }) => {
+    const response = await request.post("/booking", {
+      data: {
+        firstname: "zarg",
+      }
+    });
+    expect(response.status()).toBe(500);
+  });
+
+  test("DELETE - deleting same booking twice returns 405", async ({ request, testData }) => {
+    const authRes = await request.post("/auth", {
+      data: { username: "admin", password: "password123" },
+    });
+    const { token } = await authRes.json();
+    const testBooking = await createBooking(testData, request);
+
+    let res = await request.delete(`/booking/${testBooking.bookingid}`, {
+      headers: { "Cookie": `token=${token}` },
+    });
+    expect(res.status()).toBe(201);
+    res = await request.delete(`/booking/${testBooking.bookingid}`, {
+      headers: { "Cookie": `token=${token}` },
+    });
+    expect(res.status()).toBe(405);
+  });
+
+  test("PUT - put is idempotent", async ({ request, testData }) => {
+    const authRes = await request.post("/auth", {
+      data: { username: "admin", password: "password123" },
+    });
+    const { token } = await authRes.json();
+
+    const { bookingid } = await createBooking(testData, request);
+    let res = await request.put(`/booking/${bookingid}`, {
+      headers: { "Cookie": `token=${token}` },
+      data: testData,
+    });
+    expect(res.status()).toBe(200);
+    let booking = await res.json();
+    expect(booking).toEqual(testData);
+
+    res = await request.put(`/booking/${bookingid}`, {
+      headers: { "Cookie": `token=${token}` },
+      data: testData,
+    });
+    booking = await res.json();
+    expect(booking).toEqual(testData);
   });
 });
 
